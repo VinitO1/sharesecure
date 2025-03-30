@@ -1,0 +1,76 @@
+body {
+	margin: 0;
+	font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
+		'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+		sans-serif;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+code {
+	font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+		monospace;
+}
+
+/* File Preview Styles */
+.file-preview-modal {
+	max-width: 90vw;
+}
+
+.file-preview-modal .modal-content {
+	height: 90vh;
+	display: flex;
+	flex-direction: column;
+}
+
+.file-preview-modal .modal-body {
+	flex: 1;
+	overflow: auto;
+	padding: 0;
+}
+
+/* Document Thumbnail styles */
+.document-thumbnail {
+	transition: transform 0.2s;
+}
+
+.document-thumbnail:hover {
+	transform: scale(1.02);
+}
+
+/* Preview button styles */
+.preview-btn {
+	background-color: #f8f9fa;
+	border-color: #e9ecef;
+}
+
+.preview-btn:hover {
+	background-color: #e9ecef;
+	border-color: #dee2e6;
+}
+
+/* Document card styles */
+.document-card {
+	transition: all 0.2s ease-in-out;
+}
+
+.document-card:hover {
+	box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Custom styles for document viewer */
+.react-doc-viewer {
+	border-radius: 0 !important;
+	border: none !important;
+}
+
+.react-doc-viewer .header-bar {
+	background-color: #f8f9fa !important;
+	border-bottom: 1px solid #e9ecef !important;
+}
+
+/* Better styling for images in preview */
+img.object-fit-cover {
+	object-fit: cover;
+	object-position: center;
+}
