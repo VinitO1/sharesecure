@@ -5,11 +5,16 @@ ShareSecure is a secure document sharing application that allows users to upload
 ## Features
 
 - **Secure Authentication:** User authentication with Supabase Auth
-- **Document Management:** Upload, download, and preview documents securely
-- **Access Control:** Share documents with other users with different access levels (read, edit)
-- **File Preview:** Preview supported file types directly in the browser
-- **Activity Tracking:** Track user actions on documents (view, download, edit)
-- **Responsive Design:** Modern, responsive UI built with React and Bootstrap
+- **Document Management:** Upload, download, and manage documents securely
+- **Read-Only Sharing:** Share documents with other users with read-only access
+- **Built-in File Preview:** Preview supported file types directly in the browser:
+  - Images (jpg, jpeg, png, gif, bmp, webp, svg)
+  - PDFs with native browser rendering
+  - Text files (txt, csv, html, xml, md, rtf)
+  - Code files (js, jsx, ts, tsx, py, java, c, cpp, h, cs, json, css, php)
+- **Document Thumbnails:** Visual thumbnails for different file types
+- **Modern User Interface:** Polished, responsive UI built with React and Bootstrap
+- **Intuitive Sharing:** Clean sharing interface with user avatars and clear permissions
 
 ## Project Structure
 
@@ -35,7 +40,7 @@ The project consists of two main parts:
 - React-Bootstrap
 - Axios
 - React Icons
-- Document Viewer (@cyntler/react-doc-viewer)
+- Custom file preview system
 
 ## Getting Started
 
@@ -104,6 +109,37 @@ npm start
 
 3. Open your browser and navigate to `http://localhost:3000`.
 
+## Core Functionality
+
+### Document Preview
+
+ShareSecure includes a custom document preview system that supports:
+
+- **Images:** Renders images using native HTML `<img>` tags
+- **PDFs:** Uses the browser's built-in PDF viewer through an iframe
+- **Text & Code:** Shows text files with appropriate formatting based on file type
+- **Fallback:** Provides download options for unsupported file types
+
+The preview system is designed to be compatible with React 19, ensuring optimal performance and reliability.
+
+### Document Sharing
+
+Documents can be shared with other users with read-only access:
+
+- Simple sharing interface with email input
+- Clear indication of read-only permissions
+- Visual user list showing who has access to a document
+- Ability to remove access for specific users
+
+### User Interface
+
+The application features a modern, clean UI with:
+
+- Responsive layout for desktop and mobile devices
+- Intuitive navigation and document organization
+- Visual document thumbnails for easy recognition
+- Polished sharing interface with avatars and badges
+
 ## Database Structure
 
 The application uses the following database structure in Supabase:
@@ -129,7 +165,7 @@ CREATE TABLE access_control (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  access_level TEXT CHECK (access_level IN ('read', 'edit', 'owner')),
+  access_level TEXT CHECK (access_level IN ('read')),
   created_at TIMESTAMP DEFAULT now(),
   UNIQUE (document_id, user_id)
 );
@@ -138,7 +174,7 @@ CREATE TABLE activity_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
-  action_type TEXT NOT NULL, -- 'view', 'download', 'edit', 'share', etc.
+  action_type TEXT NOT NULL, -- 'view', 'download', 'share', etc.
   details JSONB, -- Additional action-specific information
   created_at TIMESTAMP DEFAULT now()
 );
@@ -154,10 +190,10 @@ The application uses Supabase Storage for document storage. Ensure you have set 
 ## Future Enhancements
 
 - Document versioning and history
-- Advanced document editing capabilities
 - Team workspaces for improved collaboration
 - Enhanced security with two-factor authentication
 - Mobile app versions
+- Additional file preview support for more formats
 
 ## Contributing
 

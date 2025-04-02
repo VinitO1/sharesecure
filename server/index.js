@@ -293,18 +293,24 @@ app.get('/api/documents', async (req, res) => {
         const token = req.headers.authorization?.split(' ')[1];
 
         if (!token) {
+            console.warn('Request to /api/documents with no token');
             return res.status(401).json({ error: 'No token provided' });
         }
 
+        console.log('Getting user from token...');
         const { data: userData, error: userError } = await supabase.auth.getUser(token);
 
-        if (userError) throw userError;
-
-        if (!userData.user) {
-            return res.status(401).json({ error: 'Invalid token' });
+        if (userError) {
+            console.error('User authentication error:', userError);
+            return res.status(401).json({ error: `Authentication error: ${userError.message}` });
         }
 
-        console.log('Fetching documents for user:', userData.user.id);
+        if (!userData || !userData.user) {
+            console.error('No user found for token');
+            return res.status(401).json({ error: 'Invalid token or user not found' });
+        }
+
+        console.log('Fetching documents for user:', userData.user.id, userData.user.email);
 
         // Get service role key for database operations
         const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -317,6 +323,7 @@ app.get('/api/documents', async (req, res) => {
         const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
         // Get documents owned by the user
+        console.log('Fetching owned documents...');
         const { data: ownedDocuments, error: ownedError } = await supabaseAdmin
             .from('documents')
             .select('*')
@@ -324,20 +331,28 @@ app.get('/api/documents', async (req, res) => {
 
         if (ownedError) {
             console.error('Owned documents fetch error:', ownedError);
-            return res.status(500).json({ error: ownedError.message });
+            return res.status(500).json({ error: `Error fetching owned documents: ${ownedError.message}` });
         }
 
-        // Get user data for each document owner
-        const ownerIds = [...new Set(ownedDocuments.map(doc => doc.owner_id))];
+        console.log(`Found ${ownedDocuments?.length || 0} owned documents`);
 
+        // Get user data for each document owner
         let ownerMap = {};
+        const ownerIds = [...new Set((ownedDocuments || []).map(doc => doc.owner_id))];
+
         if (ownerIds.length > 0) {
+            console.log('Fetching owner information...');
             const { data: owners, error: ownersError } = await supabaseAdmin
                 .from('users')
                 .select('id, full_name, email')
                 .in('id', ownerIds);
 
-            if (!ownersError && owners) {
+            if (ownersError) {
+                console.error('Owner fetch error:', ownersError);
+                // Continue without owner data
+            }
+
+            if (owners) {
                 ownerMap = owners.reduce((map, owner) => {
                     map[owner.id] = { full_name: owner.full_name, email: owner.email };
                     return map;
@@ -346,6 +361,7 @@ app.get('/api/documents', async (req, res) => {
         }
 
         // Get documents shared with the user
+        console.log('Fetching shared documents access control...');
         const { data: accessControl, error: accessError } = await supabaseAdmin
             .from('access_control')
             .select('document_id, access_level')
@@ -358,6 +374,7 @@ app.get('/api/documents', async (req, res) => {
 
         let sharedDocuments = [];
         if (accessControl && accessControl.length > 0) {
+            console.log(`Found ${accessControl.length} shared document permissions`);
             const sharedDocIds = accessControl.map(ac => ac.document_id);
 
             // Create access level map
@@ -367,12 +384,18 @@ app.get('/api/documents', async (req, res) => {
             }, {});
 
             // Get the shared documents
+            console.log('Fetching shared documents details...');
             const { data: sharedDocs, error: sharedError } = await supabaseAdmin
                 .from('documents')
                 .select('*')
                 .in('id', sharedDocIds);
 
-            if (!sharedError && sharedDocs) {
+            if (sharedError) {
+                console.error('Shared documents fetch error:', sharedError);
+                // Continue with empty shared documents
+            } else if (sharedDocs) {
+                console.log(`Fetched ${sharedDocs.length} shared documents`);
+
                 // Add access_level to each document
                 sharedDocuments = sharedDocs.map(doc => ({
                     ...doc,
@@ -383,22 +406,31 @@ app.get('/api/documents', async (req, res) => {
                 const sharedOwnerIds = [...new Set(sharedDocs.map(doc => doc.owner_id))].filter(id => !ownerMap[id]);
 
                 if (sharedOwnerIds.length > 0) {
-                    const { data: sharedOwners } = await supabaseAdmin
+                    console.log('Fetching shared documents owner information...');
+                    const { data: sharedOwners, error: sharedOwnersError } = await supabaseAdmin
                         .from('users')
                         .select('id, full_name, email')
                         .in('id', sharedOwnerIds);
 
+                    if (sharedOwnersError) {
+                        console.error('Shared owners fetch error:', sharedOwnersError);
+                    }
+
                     if (sharedOwners) {
+                        console.log(`Fetched ${sharedOwners.length} additional owners`);
                         sharedOwners.forEach(owner => {
                             ownerMap[owner.id] = { full_name: owner.full_name, email: owner.email };
                         });
                     }
                 }
             }
+        } else {
+            console.log('No shared document permissions found');
         }
 
         // Add owner information to each document
-        const enhancedOwnedDocs = ownedDocuments.map(doc => ({
+        console.log('Preparing response data...');
+        const enhancedOwnedDocs = (ownedDocuments || []).map(doc => ({
             ...doc,
             owner: ownerMap[doc.owner_id] || { full_name: 'Unknown', email: 'unknown' },
             access_level: 'owner'
@@ -409,13 +441,20 @@ app.get('/api/documents', async (req, res) => {
             owner: ownerMap[doc.owner_id] || { full_name: 'Unknown', email: 'unknown' }
         }));
 
-        res.status(200).json({
+        const responseData = {
             owned: enhancedOwnedDocs,
             shared: enhancedSharedDocs
+        };
+
+        console.log('Returning documents:', {
+            ownedCount: enhancedOwnedDocs.length,
+            sharedCount: enhancedSharedDocs.length
         });
+
+        res.status(200).json(responseData);
     } catch (error) {
         console.error('Documents fetch error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: error.message || 'Unknown server error' });
     }
 });
 
@@ -653,7 +692,7 @@ app.post('/api/documents/:id/share', async (req, res) => {
             return res.status(401).json({ error: 'No token provided' });
         }
 
-        console.log(`Attempting to share document ${id} with ${email}, access level: ${accessLevel}`);
+        console.log(`Attempting to share document ${id} with ${email}, access level: read-only`);
 
         const { data: userData, error: userError } = await supabase.auth.getUser(token);
 
@@ -721,14 +760,14 @@ app.post('/api/documents/:id/share', async (req, res) => {
             return res.status(400).json({ error: 'You cannot share a document with yourself' });
         }
 
-        // Add or update access control
+        // Add or update access control - always set to 'read' regardless of input
         const { data: accessData, error: accessError } = await supabaseAdmin
             .from('access_control')
             .upsert([
                 {
                     document_id: id,
                     user_id: shareUser.id,
-                    access_level: accessLevel
+                    access_level: 'read' // Force 'read' access level
                 }
             ])
             .select();
@@ -738,10 +777,10 @@ app.post('/api/documents/:id/share', async (req, res) => {
             throw accessError;
         }
 
-        console.log('Document shared successfully');
+        console.log('Document shared successfully with read-only access');
 
         res.status(200).json({
-            message: `Document successfully shared with ${shareUser.full_name || shareUser.email}`,
+            message: `Document successfully shared with ${shareUser.full_name || shareUser.email} (read-only access)`,
             access: accessData[0]
         });
     } catch (error) {

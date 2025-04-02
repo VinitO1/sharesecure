@@ -1,23 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Modal, Button } from 'react-bootstrap';
-import DocViewer, { DocViewerRenderers } from "@cyntler/react-doc-viewer";
-import "@cyntler/react-doc-viewer/dist/index.css";
 import {
     HiOutlineDocumentText,
-    HiX,
     HiOutlineExternalLink,
-    HiOutlineDownload
+    HiOutlineDownload,
+    HiOutlineCode,
+    HiOutlinePhotograph
 } from 'react-icons/hi';
 import { documentService } from '../services/api';
-import {
-    getFileExtension,
-    extractFilenameFromUrl,
-    isPreviewableFile
-} from '../utils/fileUtils';
-import JSONRenderer from './JSONRenderer';
-import TextRenderer from './TextRenderer';
+import { getFileExtension, isPreviewableFile, getPreviewType } from '../utils/fileUtils';
 
-// Component for displaying file preview and download options
 const FilePreview = ({ documentId, fileName }) => {
     const [showModal, setShowModal] = useState(false);
     const [downloadUrl, setDownloadUrl] = useState(null);
@@ -26,8 +18,9 @@ const FilePreview = ({ documentId, fileName }) => {
     const [downloadLoading, setDownloadLoading] = useState(false);
 
     const extension = getFileExtension(fileName);
+    const previewType = getPreviewType(extension);
 
-    const handleOpenPreview = async () => {
+    const fetchDownloadUrl = async () => {
         try {
             setLoading(true);
             setError('');
@@ -40,18 +33,26 @@ const FilePreview = ({ documentId, fileName }) => {
             const url = response.data.downloadUrl;
             console.log('Received download URL:', url);
 
-            // Validate URL before showing modal
+            // Validate URL before using
             if (!url.startsWith('http')) {
                 throw new Error('Invalid download URL format');
             }
 
             setDownloadUrl(url);
-            setShowModal(true);
+            return url;
         } catch (err) {
             console.error('Preview error:', err);
             setError('Error loading preview: ' + (err?.response?.data?.error || err.message || 'Please try again.'));
+            return null;
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleOpenPreview = async () => {
+        const url = await fetchDownloadUrl();
+        if (url) {
+            setShowModal(true);
         }
     };
 
@@ -59,29 +60,22 @@ const FilePreview = ({ documentId, fileName }) => {
         setShowModal(false);
     };
 
-    const handleDirectDownload = async (e) => {
+    const handleDownload = async (e) => {
         if (e) e.stopPropagation();
 
         try {
             setDownloadLoading(true);
-            setError('');
 
-            // Get the proper filename for display
-            let downloadFilename = fileName;
-
-            // If the filename is just a UUID or path, extract a better name
-            if (fileName && (fileName.includes('/') || fileName.length > 30 && !fileName.includes('.'))) {
-                const parts = fileName.split('_');
-                if (parts.length >= 3) {
-                    // Extract the original filename from userId_timestamp_originalname
-                    downloadFilename = parts.slice(2).join('_');
+            // If we don't have the URL yet, fetch it
+            let url = downloadUrl;
+            if (!url) {
+                url = await fetchDownloadUrl();
+                if (!url) {
+                    throw new Error('Failed to get download URL');
                 }
             }
 
-            console.log(`Initiating download for ${documentId} as ${downloadFilename}`);
-
-            // Use the service method for downloading
-            await documentService.downloadDocument(documentId, downloadFilename);
+            window.open(url, '_blank');
         } catch (err) {
             console.error('Download error:', err);
             setError('Error downloading file: ' + (err.message || 'Please try again.'));
@@ -90,7 +84,7 @@ const FilePreview = ({ documentId, fileName }) => {
         }
     };
 
-    // Render different preview buttons based on file type
+    // Render preview button based on file type
     const getPreviewButton = () => {
         if (isPreviewableFile(extension)) {
             return (
@@ -101,7 +95,13 @@ const FilePreview = ({ documentId, fileName }) => {
                     onClick={handleOpenPreview}
                     disabled={loading}
                 >
-                    <HiOutlineExternalLink className="me-1" />
+                    {previewType === 'image' ? (
+                        <HiOutlinePhotograph className="me-1" />
+                    ) : previewType === 'code' ? (
+                        <HiOutlineCode className="me-1" />
+                    ) : (
+                        <HiOutlineExternalLink className="me-1" />
+                    )}
                     {loading ? 'Loading...' : 'Preview'}
                 </Button>
             );
@@ -109,53 +109,117 @@ const FilePreview = ({ documentId, fileName }) => {
         return null;
     };
 
+    // Render the file preview content
     const renderPreviewContent = () => {
         if (!downloadUrl) return <div className="text-center p-5">Loading preview...</div>;
 
         try {
-            console.log('Attempting to render preview with URL:', downloadUrl);
-            console.log('File extension:', extension);
+            // Handle different preview types based on file extension
+            switch (previewType) {
+                case 'image':
+                    return (
+                        <div className="text-center p-3" style={{ height: 'calc(100vh - 200px)', overflow: 'auto' }}>
+                            <img
+                                src={downloadUrl}
+                                alt="Document preview"
+                                className="mw-100 h-auto"
+                                onError={() => setError('Error loading image')}
+                            />
+                        </div>
+                    );
 
-            // Use custom renderer for JSON files
-            if (extension === 'json') {
-                return <JSONRenderer mainState={{ currentDocument: { uri: downloadUrl } }} />;
+                case 'pdf':
+                    return (
+                        <div style={{ height: 'calc(100vh - 200px)' }}>
+                            <iframe
+                                src={`${downloadUrl}#toolbar=0`}
+                                title="PDF Preview"
+                                width="100%"
+                                height="100%"
+                                style={{ border: 'none' }}
+                            />
+                        </div>
+                    );
+
+                case 'text':
+                case 'code':
+                    const isCode = previewType === 'code';
+                    return (
+                        <div className="p-3" style={{ height: 'calc(100vh - 200px)', overflow: 'auto' }}>
+                            <div className={`alert alert-${isCode ? 'secondary' : 'info'} mb-3`}>
+                                <p className="mb-0">
+                                    {isCode
+                                        ? `This is a code file (${extension.toUpperCase()}) and may not display with proper formatting.`
+                                        : `This is a text file and may not display correctly in preview.`
+                                    }
+                                </p>
+                            </div>
+                            <a
+                                href={downloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-primary mb-3"
+                            >
+                                Open in New Tab
+                            </a>
+                            <div
+                                className="border rounded p-3 bg-light"
+                                style={{
+                                    maxHeight: '500px',
+                                    overflow: 'auto',
+                                    fontFamily: isCode ? 'monospace' : 'inherit',
+                                    whiteSpace: isCode ? 'pre' : 'pre-wrap',
+                                    fontSize: isCode ? '0.9rem' : 'inherit'
+                                }}
+                            >
+                                <iframe
+                                    src={downloadUrl}
+                                    title={`${isCode ? 'Code' : 'Text'} Preview`}
+                                    width="100%"
+                                    height="500px"
+                                    style={{ border: 'none' }}
+                                />
+                            </div>
+                        </div>
+                    );
+
+                default:
+                    // Not directly previewable
+                    return (
+                        <div className="text-center p-5">
+                            <p>Preview is not available for this file type ({extension.toUpperCase()}).</p>
+                            <Button
+                                variant="primary"
+                                href={downloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mb-3"
+                            >
+                                <HiOutlineExternalLink className="me-1" />
+                                Open File in New Tab
+                            </Button>
+                            <div className="mt-3">
+                                <Button
+                                    variant="outline-secondary"
+                                    onClick={handleDownload}
+                                    disabled={downloadLoading}
+                                >
+                                    <HiOutlineDownload className="me-1" />
+                                    {downloadLoading ? 'Downloading...' : 'Download File'}
+                                </Button>
+                            </div>
+                        </div>
+                    );
             }
-
-            // Use text renderer for SQL and other text files
-            if (['sql', 'txt', 'md', 'csv'].includes(extension)) {
-                return <TextRenderer mainState={{ currentDocument: { uri: downloadUrl } }} />;
-            }
-
-            return (
-                <DocViewer
-                    documents={[{ uri: downloadUrl, fileName }]}
-                    pluginRenderers={DocViewerRenderers}
-                    style={{ height: 'calc(100vh - 200px)' }}
-                    config={{
-                        header: {
-                            disableHeader: false,
-                            disableFileName: false,
-                            retainURLParams: true
-                        },
-                        loadingRenderer: {
-                            overrideComponent: () => <div className="text-center p-5">Loading document...</div>
-                        }
-                    }}
-                    onError={(error) => {
-                        console.error('DocViewer error:', error);
-                        setError('Error rendering preview: ' + (error?.message || 'Unknown error'));
-                    }}
-                />
-            );
         } catch (error) {
             console.error("Error rendering preview:", error);
             return (
                 <div className="text-center p-5 text-danger">
-                    <p>Error rendering preview. This file type may not be supported for preview.</p>
+                    <p>Error rendering preview. This file type may not be supported.</p>
                     <p className="small text-muted mb-3">Error details: {error.message || 'Unknown error'}</p>
                     <Button
                         variant="primary"
-                        onClick={handleDirectDownload}
+                        onClick={handleDownload}
                         disabled={downloadLoading}
                     >
                         <HiOutlineDownload className="me-1" />
@@ -166,6 +230,23 @@ const FilePreview = ({ documentId, fileName }) => {
         }
     };
 
+    const getModalTitle = () => {
+        let icon = <HiOutlineDocumentText />;
+
+        if (previewType === 'image') {
+            icon = <HiOutlinePhotograph />;
+        } else if (previewType === 'code') {
+            icon = <HiOutlineCode />;
+        }
+
+        return (
+            <span className="d-flex align-items-center">
+                {React.cloneElement(icon, { className: "me-2 fs-4" })}
+                <span className="text-truncate">{fileName || 'Document Preview'}</span>
+            </span>
+        );
+    };
+
     return (
         <>
             <div className="d-flex">
@@ -173,7 +254,7 @@ const FilePreview = ({ documentId, fileName }) => {
                 <Button
                     variant="outline-secondary"
                     size="sm"
-                    onClick={handleDirectDownload}
+                    onClick={handleDownload}
                     disabled={downloadLoading}
                 >
                     <HiOutlineDownload className="me-1" />
@@ -192,8 +273,7 @@ const FilePreview = ({ documentId, fileName }) => {
             >
                 <Modal.Header closeButton>
                     <Modal.Title className="d-flex align-items-center">
-                        <HiOutlineDocumentText className="me-2 fs-4" />
-                        <span className="text-truncate">{fileName || 'Document Preview'}</span>
+                        {getModalTitle()}
                     </Modal.Title>
                 </Modal.Header>
                 <Modal.Body className="p-0">
@@ -205,7 +285,7 @@ const FilePreview = ({ documentId, fileName }) => {
                     </Button>
                     <Button
                         variant="primary"
-                        onClick={handleDirectDownload}
+                        onClick={handleDownload}
                         disabled={downloadLoading}
                     >
                         <HiOutlineDownload className="me-1" />

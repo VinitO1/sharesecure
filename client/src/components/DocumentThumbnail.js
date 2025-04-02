@@ -19,27 +19,48 @@ const DocumentThumbnail = ({ documentId, fileName }) => {
     const extension = getFileExtension(fileName);
 
     useEffect(() => {
+        let isMounted = true;
+
+        // Only load thumbnails for image files
         const loadThumbnail = async () => {
-            try {
+            // Reset states
+            if (isMounted) {
                 setLoading(true);
-                // Only attempt to generate thumbnail for image files
-                if (isImageFile(extension)) {
-                    const response = await documentService.getDownloadUrl(documentId);
+                setError(false);
+                setThumbnailUrl(null);
+            }
+
+            // Skip API call if it's not an image file
+            if (!isImageFile(extension)) {
+                if (isMounted) setLoading(false);
+                return;
+            }
+
+            try {
+                const response = await documentService.getDownloadUrl(documentId);
+
+                if (isMounted && response.data && response.data.downloadUrl) {
                     setThumbnailUrl(response.data.downloadUrl);
                 }
             } catch (err) {
                 console.error('Thumbnail error:', err);
-                setError(true);
+                if (isMounted) setError(true);
             } finally {
-                setLoading(false);
+                if (isMounted) setLoading(false);
             }
         };
 
+        // Execute loading
         loadThumbnail();
+
+        // Cleanup function to prevent state updates on unmounted component
+        return () => {
+            isMounted = false;
+        };
     }, [documentId, fileName, extension]);
 
     const isImageFile = (extension) => {
-        return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(extension);
+        return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(extension.toLowerCase());
     };
 
     const getFileTypeIcon = () => {
@@ -77,7 +98,7 @@ const DocumentThumbnail = ({ documentId, fileName }) => {
             );
         }
 
-        if (error || !isImageFile(extension)) {
+        if (error || !isImageFile(extension) || !thumbnailUrl) {
             return (
                 <div className="d-flex justify-content-center align-items-center bg-light rounded-3 document-thumbnail" style={{ height: '120px' }}>
                     {getFileTypeIcon()}
@@ -85,25 +106,17 @@ const DocumentThumbnail = ({ documentId, fileName }) => {
             );
         }
 
-        if (thumbnailUrl) {
-            return (
-                <div
-                    className="rounded-3 bg-light overflow-hidden document-thumbnail"
-                    style={{ height: '120px' }}
-                >
-                    <img
-                        src={thumbnailUrl}
-                        alt="Document preview"
-                        className="w-100 h-100 object-fit-cover"
-                        onError={() => setError(true)}
-                    />
-                </div>
-            );
-        }
-
         return (
-            <div className="d-flex justify-content-center align-items-center bg-light rounded-3 document-thumbnail" style={{ height: '120px' }}>
-                {getFileTypeIcon()}
+            <div
+                className="rounded-3 bg-light overflow-hidden document-thumbnail"
+                style={{ height: '120px' }}
+            >
+                <img
+                    src={thumbnailUrl}
+                    alt="Document preview"
+                    className="w-100 h-100 object-fit-cover"
+                    onError={() => setError(true)}
+                />
             </div>
         );
     };

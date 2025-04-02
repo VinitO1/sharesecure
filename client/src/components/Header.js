@@ -34,7 +34,7 @@ const Header = () => {
                     <Nav className="ms-auto">
                         {user ? (
                             <>
-                                <Nav.Link as={Link} to="/">Dashboard</Nav.Link>
+                                <Nav.Link as={Link} to="/dashboard">Dashboard</Nav.Link>
                                 <Nav.Link as={Link} to="/upload">Upload</Nav.Link>
                                 <Button
                                     variant="outline-danger"

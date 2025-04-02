@@ -99,12 +99,57 @@ export const downloadFile = async (url, filename) => {
  * @returns {boolean} Whether the file can be previewed
  */
 export const isPreviewableFile = (extension) => {
-    const previewableExtensions = [
-        'pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp',
-        'txt', 'csv', 'md', 'json', 'sql'
+    if (!extension) return false;
+
+    const ext = extension.toLowerCase();
+
+    // Files that can be previewed directly in the browser
+    const directlyPreviewable = [
+        // Images
+        'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg',
+        // PDFs
+        'pdf',
+        // Text files
+        'txt', 'csv', 'html', 'css', 'json', 'xml', 'md', 'rtf',
+        // Code files
+        'js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'cs', 'php',
     ];
 
-    return previewableExtensions.includes(extension.toLowerCase());
+    return directlyPreviewable.includes(ext);
+};
+
+/**
+ * Get preview type based on file extension
+ * @param {string} extension - The file extension
+ * @returns {string} The preview type (image, pdf, text, code, or null)
+ */
+export const getPreviewType = (extension) => {
+    if (!extension) return null;
+
+    const ext = extension.toLowerCase();
+
+    // Image files
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].includes(ext)) {
+        return 'image';
+    }
+
+    // PDF files
+    if (ext === 'pdf') {
+        return 'pdf';
+    }
+
+    // Text files
+    if (['txt', 'csv', 'rtf', 'html', 'xml', 'md'].includes(ext)) {
+        return 'text';
+    }
+
+    // Code files
+    if (['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'cs', 'json', 'css', 'php'].includes(ext)) {
+        return 'code';
+    }
+
+    // Not directly previewable
+    return null;
 };
 
 /**

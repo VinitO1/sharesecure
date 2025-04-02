@@ -23,9 +23,9 @@ api.interceptors.request.use(
 
             if (session?.access_token) {
                 config.headers.Authorization = `Bearer ${session.access_token}`;
-                console.log('Added auth token to request');
+                console.log('Added auth token to request:', config.url);
             } else {
-                console.warn('No valid session found for request');
+                console.warn('No valid session found for request to:', config.url);
             }
 
             return config;
@@ -39,23 +39,37 @@ api.interceptors.request.use(
 
 // Add response interceptor to handle auth errors
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        console.log(`API request successful: ${response.config.method.toUpperCase()} ${response.config.url}`);
+        return response;
+    },
     async (error) => {
         const originalRequest = error.config;
+        console.error(`API request failed: ${originalRequest?.method?.toUpperCase()} ${originalRequest?.url}`, error.response?.status, error.message);
 
         // If error is 401 Unauthorized and we haven't retried yet
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
 
             try {
+                console.log('Attempting to refresh token...');
                 // Refresh session
-                const { data } = await supabase.auth.refreshSession();
+                const { data, error: refreshError } = await supabase.auth.refreshSession();
+
+                if (refreshError) {
+                    console.error('Token refresh failed:', refreshError);
+                    throw refreshError;
+                }
+
                 const newSession = data.session;
 
                 if (newSession?.access_token) {
+                    console.log('Token refreshed successfully, retrying request');
                     // Update the token in the request
                     originalRequest.headers.Authorization = `Bearer ${newSession.access_token}`;
                     return api(originalRequest);
+                } else {
+                    console.error('Token refresh did not return a new token');
                 }
             } catch (refreshError) {
                 console.error('Failed to refresh auth token:', refreshError);
@@ -69,7 +83,15 @@ api.interceptors.response.use(
 export const documentService = {
     // Get all documents (owned and shared)
     async getDocuments() {
-        return api.get('/documents');
+        try {
+            console.log('Fetching documents...');
+            const response = await api.get('/documents');
+            console.log('Documents fetched successfully:', response.data);
+            return response;
+        } catch (error) {
+            console.error('Error fetching documents:', error.message, error.response?.data);
+            throw error;
+        }
     },
 
     // Get a single document by ID
@@ -99,62 +121,6 @@ export const documentService = {
     // Get download URL for a document
     async getDownloadUrl(documentId) {
         return api.get(`/documents/${documentId}/download`);
-    },
-
-    // Direct download a document (handles the full download process)
-    async downloadDocument(documentId, filename) {
-        try {
-            console.log(`Initiating download for document ${documentId} as ${filename}`);
-
-            // Get the download URL
-            const response = await api.get(`/documents/${documentId}/download`);
-            const url = response.data.downloadUrl;
-
-            console.log(`Got signed URL: ${url}`);
-
-            // Fetch the file directly
-            const fileResponse = await fetch(url, {
-                method: 'GET',
-                mode: 'cors',
-                cache: 'no-cache',
-                headers: {
-                    'Accept': '*/*'
-                }
-            });
-
-            if (!fileResponse.ok) {
-                throw new Error(`HTTP error! status: ${fileResponse.status}`);
-            }
-
-            // Get file data as blob
-            const blob = await fileResponse.blob();
-            console.log(`Fetched file blob, size: ${blob.size} bytes, type: ${blob.type}`);
-
-            // Create object URL from blob
-            const objectUrl = URL.createObjectURL(blob);
-
-            // Create temporary link and trigger download
-            const link = document.createElement('a');
-            link.href = objectUrl;
-            link.setAttribute('download', filename);
-            link.style.display = 'none';
-
-            // Add to DOM, click and cleanup
-            document.body.appendChild(link);
-            link.click();
-
-            // Delay cleanup to ensure download starts
-            setTimeout(() => {
-                document.body.removeChild(link);
-                URL.revokeObjectURL(objectUrl);
-                console.log('Download link cleaned up');
-            }, 100);
-
-            return true;
-        } catch (error) {
-            console.error('Download error:', error);
-            throw error;
-        }
     },
 
     // Delete a document

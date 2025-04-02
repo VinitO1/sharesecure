@@ -1,70 +1,113 @@
-# Getting Started with Create React App
+# ShareSecure Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This is the frontend application for ShareSecure, a secure document sharing platform. It's built with React and provides a modern, responsive user interface for managing and sharing documents.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- **Document Management:** Upload, view, download, and share documents
+- **Custom File Preview:** Built-in preview for images, PDFs, text files, and code
+- **Document Thumbnails:** Visual thumbnails for different file types
+- **Modern Sharing Interface:** Intuitive UI for sharing documents with others
+- **Responsive Design:** Optimized for both desktop and mobile devices
 
-### `npm start`
+## Tech Stack
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- **React 19:** Latest version of React for building the UI
+- **React Router 7:** For application routing
+- **Bootstrap 5:** For responsive layouts and UI components
+- **React-Bootstrap:** React components for Bootstrap
+- **Axios:** For API requests to the backend
+- **React Icons:** For beautiful, consistent icons
+- **Custom File Preview:** Native browser-based file preview system
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Getting Started
 
-### `npm test`
+### Prerequisites
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- Node.js 14+ installed
+- ShareSecure backend server running
 
-### `npm run build`
+### Installation
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+1. Install dependencies:
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```bash
+npm install
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+2. Create a `.env` file in the root directory with the following variables:
 
-### `npm run eject`
+```
+REACT_APP_SUPABASE_URL=your_supabase_url
+REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
+REACT_APP_API_URL=http://localhost:5000/api
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### Running the Application
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```bash
+npm start
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+This will start the development server on [http://localhost:3000](http://localhost:3000).
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## Project Structure
+
+- **src/**
+  - **components/**: Reusable UI components
+    - **Button.js**: Custom button component
+    - **Input.js**: Custom input component
+    - **FilePreview.js**: Document preview component
+    - **DocumentThumbnail.js**: Thumbnail component for documents
+  - **contexts/**: React context providers
+    - **AuthContext.js**: Authentication context
+  - **pages/**: Application pages
+    - **Login.js**: User login page
+    - **Register.js**: User registration page
+    - **Dashboard.js**: Main document management interface
+    - **DocumentView.js**: Document viewing and sharing page
+    - **Upload.js**: Document upload page
+  - **services/**: API services
+    - **api.js**: API client configuration and endpoints
+  - **utils/**: Utility functions
+    - **fileUtils.js**: File handling utilities
+
+## Key Components
+
+### FilePreview
+
+A custom component for previewing various file types:
+
+- Renders images using native `<img>` tags
+- Displays PDFs using browser's built-in PDF viewer
+- Shows text and code files with appropriate formatting
+- Handles unsupported file types gracefully
+
+### DocumentThumbnail
+
+Displays visual representations of documents:
+
+- Shows image thumbnails for image files
+- Uses appropriate icons for different file types
+- Provides visual cues about document type
+
+### Document Sharing
+
+Intuitive interface for sharing documents:
+
+- Email input for recipient
+- Clear read-only permission indication
+- User list showing who has access to documents
+- User avatars and permission badges
+
+## Building for Production
+
+```bash
+npm run build
+```
+
+This will create an optimized production build in the `build` folder.
 
 ## Learn More
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+For more information about the ShareSecure application, see the main [README.md](../README.md) file.

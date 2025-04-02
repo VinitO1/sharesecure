@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Card, Row, Col, Badge, Tab, Tabs, Container, Button as BsButton, Modal, Alert } from 'react-bootstrap';
 import {
     HiOutlineDocumentText,
@@ -9,7 +9,8 @@ import {
     HiOutlineUpload,
     HiOutlineClock,
     HiOutlineInformationCircle,
-    HiOutlineTrash
+    HiOutlineTrash,
+    HiOutlineRefresh
 } from 'react-icons/hi';
 import { documentService } from '../services/api';
 import Button from '../components/Button';
@@ -24,10 +25,24 @@ const Dashboard = () => {
     const [activeTab, setActiveTab] = useState('owned');
     const { user } = useAuth();
     const location = useLocation();
+    const navigate = useNavigate();
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [documentToDelete, setDocumentToDelete] = useState(null);
     const [deleting, setDeleting] = useState(false);
     const [alertMessage, setAlertMessage] = useState('');
+
+    useEffect(() => {
+        console.log('Dashboard component mounted');
+
+        // Log authentication status
+        console.log('Auth state on Dashboard mount:', {
+            isAuthenticated: !!user,
+            userId: user?.id,
+            email: user?.email
+        });
+
+        fetchDocuments();
+    }, [user]); // Add user as a dependency to refetch when auth changes
 
     useEffect(() => {
         // Check for messages from other components
@@ -41,22 +56,84 @@ const Dashboard = () => {
         }
     }, [location.state]);
 
-    useEffect(() => {
-        const fetchDocuments = async () => {
-            try {
-                setLoading(true);
-                const response = await documentService.getDocuments();
-                setDocuments(response.data);
-            } catch (err) {
-                setError('Error fetching documents. Please try again later.');
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
+    const fetchDocuments = async (retryCount = 0) => {
+        try {
+            console.log(`Starting to fetch documents${retryCount > 0 ? ` (retry ${retryCount})` : ''}...`);
+            setLoading(true);
+            setError('');
 
+            // Check if user is authenticated
+            if (!user || !user.id) {
+                console.warn('Attempting to fetch documents without authenticated user');
+                setError('You must be logged in to view documents');
+                setDocuments({ owned: [], shared: [] });
+                setLoading(false);
+                return;
+            }
+
+            // Add a timeout to handle case where API never responds
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Request timed out after 10 seconds')), 10000)
+            );
+
+            const fetchPromise = documentService.getDocuments();
+
+            // Race between the fetch and the timeout
+            const response = await Promise.race([fetchPromise, timeoutPromise]);
+
+            console.log('Documents fetch successful:', response.data);
+
+            // Check if the response data has the expected structure
+            if (!response.data || typeof response.data !== 'object') {
+                throw new Error('Unexpected response format from server');
+            }
+
+            // Ensure we have arrays even if the server returns null
+            const ownedDocs = Array.isArray(response.data.owned) ? response.data.owned : [];
+            const sharedDocs = Array.isArray(response.data.shared) ? response.data.shared : [];
+
+            setDocuments({
+                owned: ownedDocs,
+                shared: sharedDocs
+            });
+
+            console.log(`Loaded ${ownedDocs.length} owned and ${sharedDocs.length} shared documents`);
+        } catch (err) {
+            console.error('Error fetching documents:', err);
+
+            let errorMessage = 'Error connecting to the server.';
+
+            if (err.message.includes('timeout')) {
+                errorMessage = 'Server request timed out. Please ensure the backend is running and try again.';
+            } else if (err.response?.status === 401) {
+                errorMessage = 'Authentication error. Please log in again.';
+            } else if (err.response?.data?.error) {
+                errorMessage = `Server error: ${err.response.data.error}`;
+            }
+
+            // If we still have retries left and this is a timeout or network error, try again
+            const isNetworkError = !err.response || err.message.includes('timeout') || err.message.includes('Network Error');
+            if (retryCount < 2 && isNetworkError) {
+                console.log(`Retrying (${retryCount + 1}/2) in 2 seconds...`);
+
+                // Wait 2 seconds before retrying
+                setTimeout(() => {
+                    fetchDocuments(retryCount + 1);
+                }, 2000);
+                return;
+            }
+
+            setError(errorMessage);
+            // Initialize with empty arrays to show empty state
+            setDocuments({ owned: [], shared: [] });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRetry = () => {
         fetchDocuments();
-    }, []);
+    };
 
     const handleDeletePrompt = (doc, e) => {
         e.preventDefault();
@@ -135,53 +212,67 @@ const Dashboard = () => {
     };
 
     const renderDocumentCard = (doc) => {
+        if (!doc || !doc.id) {
+            return (
+                <Card className="mb-3 shadow-sm document-card">
+                    <Card.Body className="p-4 text-center text-muted">
+                        <p>Invalid document data</p>
+                    </Card.Body>
+                </Card>
+            );
+        }
+
+        let fileUrl = doc.file_url || '';
+
         return (
             <Card className="mb-3 shadow-sm document-card">
                 <Card.Body>
                     <Row>
                         <Col md={3} className="mb-3 mb-md-0">
                             <Link to={`/documents/${doc.id}`} className="text-decoration-none">
-                                <DocumentThumbnail documentId={doc.id} fileName={doc.file_url} />
+                                <DocumentThumbnail documentId={doc.id} fileName={fileUrl} />
                             </Link>
                         </Col>
                         <Col md={9}>
                             <div className="d-flex justify-content-between align-items-start h-100">
                                 <div className="d-flex flex-column h-100">
                                     <Link to={`/documents/${doc.id}`} className="text-decoration-none">
-                                        <Card.Title className="h5 mb-1 text-primary">{doc.title || "Untitled Document"}</Card.Title>
+                                        <Card.Title className={`h5 mb-1 ${doc.access_level !== 'owner' ? 'text-primary' : ''}`} style={{
+                                            textDecoration: doc.access_level !== 'owner' ? 'underline' : 'none'
+                                        }}>
+                                            {doc.title || "Untitled Document"}
+                                        </Card.Title>
                                     </Link>
                                     <Card.Text className="text-muted small mb-1">
                                         {doc.description || "No description"}
                                     </Card.Text>
                                     <div className="d-flex align-items-center mt-2 small text-muted">
                                         <HiOutlineClock className="me-1" />
-                                        <span>{formatDate(doc.created_at)}</span>
+                                        <span>{formatDate(doc.created_at || new Date())}</span>
                                         {doc.access_level && doc.access_level !== 'owner' && (
                                             <Badge bg="info" className="ms-2">{doc.access_level}</Badge>
                                         )}
                                     </div>
                                     <div className="mt-auto pt-3">
-                                        <FilePreview documentId={doc.id} fileName={doc.file_url} />
+                                        <FilePreview documentId={doc.id} fileName={fileUrl} />
                                     </div>
                                 </div>
                                 <div className="d-flex flex-column">
-                                    <Link to={`/documents/${doc.id}`}>
-                                        <BsButton variant="outline-primary" size="sm" className="mb-2">
-                                            {doc.access_level === 'owner' ? (
-                                                <><HiOutlineShare className="me-1" /> Share</>
-                                            ) : (
-                                                <><HiOutlineEye className="me-1" /> View</>
-                                            )}
-                                        </BsButton>
-                                    </Link>
                                     {doc.access_level === 'owner' && (
-                                        <BsButton
-                                            variant="outline-danger"
-                                            size="sm"
-                                            onClick={(e) => handleDeletePrompt(doc, e)}
-                                        >
-                                            <HiOutlineTrash className="me-1" /> Delete
-                                        </BsButton>
+                                        <>
+                                            <Link to={`/documents/${doc.id}`}>
+                                                <BsButton variant="outline-primary" size="sm" className="mb-2">
+                                                    <HiOutlineShare className="me-1" /> Share
+                                                </BsButton>
+                                            </Link>
+                                            <BsButton
+                                                variant="outline-danger"
+                                                size="sm"
+                                                onClick={(e) => handleDeletePrompt(doc, e)}
+                                            >
+                                                <HiOutlineTrash className="me-1" /> Delete
+                                            </BsButton>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -220,12 +311,52 @@ const Dashboard = () => {
         </Card>
     );
 
+    const renderNoDocuments = (message) => (
+        <div className="text-center py-5">
+            <HiOutlineInformationCircle size={48} className="text-muted mb-3" />
+            <h3 className="h5 text-muted">{message}</h3>
+            {activeTab === 'owned' && (
+                <Button
+                    variant="primary"
+                    className="mt-3"
+                    onClick={() => navigate('/upload')}
+                >
+                    <HiOutlineUpload className="me-1" /> Upload Document
+                </Button>
+            )}
+        </div>
+    );
+
     if (loading) {
         return (
             <Container className="text-center py-5">
                 <div className="spinner-border text-primary" role="status">
                     <span className="visually-hidden">Loading...</span>
                 </div>
+                <p className="mt-3">Loading your documents...</p>
+            </Container>
+        );
+    }
+
+    if (error) {
+        return (
+            <Container className="py-5">
+                <Card className="text-center p-5 shadow-sm">
+                    <Card.Body>
+                        <div className="my-4 text-danger">
+                            <HiOutlineInformationCircle size={50} />
+                        </div>
+                        <Card.Title>Connection Error</Card.Title>
+                        <Card.Text>{error}</Card.Text>
+                        <BsButton
+                            variant="primary"
+                            onClick={handleRetry}
+                            className="mt-3"
+                        >
+                            <HiOutlineRefresh className="me-2" /> Retry Connection
+                        </BsButton>
+                    </Card.Body>
+                </Card>
             </Container>
         );
     }
@@ -258,12 +389,6 @@ const Dashboard = () => {
                 </Col>
             </Row>
 
-            {error && (
-                <div className="alert alert-danger" role="alert">
-                    {error}
-                </div>
-            )}
-
             <Tabs
                 activeKey={activeTab}
                 onSelect={(k) => setActiveTab(k)}
@@ -285,7 +410,7 @@ const Dashboard = () => {
                             </div>
                         ))
                     ) : (
-                        renderEmptyState('owned')
+                        renderNoDocuments('No documents yet')
                     )}
                 </Tab>
                 <Tab
@@ -293,18 +418,24 @@ const Dashboard = () => {
                     title={
                         <span>
                             <HiOutlineShare className="me-1" />
-                            Shared with Me ({documents.shared?.length || 0})
+                            Shared With Me ({documents.shared?.length || 0})
                         </span>
                     }
                 >
                     {documents.shared?.length > 0 ? (
-                        documents.shared.map(doc => (
-                            <div key={doc.id}>
-                                {renderDocumentCard(doc)}
+                        <>
+                            <div className="alert alert-info mb-3">
+                                <HiOutlineInformationCircle className="me-2" />
+                                Click on a document title or thumbnail to view the document. These documents are shared with you in read-only mode.
                             </div>
-                        ))
+                            {documents.shared.map(doc => (
+                                <div key={doc.id}>
+                                    {renderDocumentCard(doc)}
+                                </div>
+                            ))}
+                        </>
                     ) : (
-                        renderEmptyState('shared')
+                        renderNoDocuments('No shared documents')
                     )}
                 </Tab>
             </Tabs>

@@ -25,14 +25,23 @@ const Login = () => {
             setError('');
             setLoading(true);
 
-            const { success, error } = await login(email, password);
+            console.log('Attempting login with email:', email);
+
+            const { success, error, data } = await login(email, password);
 
             if (!success) {
+                console.error('Login failed:', error);
                 throw new Error(error);
             }
 
-            navigate('/');
+            console.log('Login successful, user:', data?.user?.id);
+
+            // Force a slight delay to ensure auth context is updated
+            setTimeout(() => {
+                navigate('/dashboard');
+            }, 100);
         } catch (err) {
+            console.error('Login error:', err);
             setError(err.message || 'Failed to login. Please check your credentials.');
         } finally {
             setLoading(false);
